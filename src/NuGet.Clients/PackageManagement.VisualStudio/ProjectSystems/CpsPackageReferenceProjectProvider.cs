@@ -9,6 +9,8 @@ using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Utilities;
 using NuGet.ProjectManagement;
 using NuGet.ProjectModel;
+using Microsoft.VisualStudio.ComponentModelHost;
+using NuGet.PackageManagement.UI;
 
 namespace NuGet.PackageManagement.VisualStudio
 {
@@ -22,15 +24,27 @@ namespace NuGet.PackageManagement.VisualStudio
     {
         private readonly IProjectSystemCache _projectSystemCache;
 
+        private readonly Lazy<IComponentModel> _componentModel;
+
         [ImportingConstructor]
-        public CpsPackageReferenceProjectProvider(IProjectSystemCache projectSystemCache)
+        public CpsPackageReferenceProjectProvider(
+            IProjectSystemCache projectSystemCache,
+            [Import(typeof(SVsServiceProvider))]
+            IServiceProvider serviceProvider)
         {
             if (projectSystemCache == null)
             {
                 throw new ArgumentNullException(nameof(projectSystemCache));
             }
 
+            if (serviceProvider == null)
+            {
+                throw new ArgumentNullException(nameof(serviceProvider));
+            }
+
             _projectSystemCache = projectSystemCache;
+            _componentModel = new Lazy<IComponentModel>(
+                () => serviceProvider.GetComponentModel());
         }
 
         public bool TryCreateNuGetProject(EnvDTE.Project dteProject, ProjectSystemProviderContext context, out NuGetProject result)
@@ -85,6 +99,9 @@ namespace NuGet.PackageManagement.VisualStudio
             {
                 return false;
             }
+
+            // Lazy load the CPS enabled JoinableTaskFactory for the UI.
+            NuGetUIThreadHelper.SetJoinableTaskFactoryFromService(_componentModel.Value);
 
             var projectNames = ProjectNames.FromDTEProject(dteProject);
             var fullProjectPath = EnvDTEProjectUtility.GetFullProjectPath(dteProject);
