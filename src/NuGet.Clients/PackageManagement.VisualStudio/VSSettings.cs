@@ -13,7 +13,9 @@ namespace NuGet.PackageManagement.VisualStudio
     [PartCreationPolicy(CreationPolicy.Shared)]
     public class VSSettings : Configuration.ISettings
     {
-        private Configuration.ISettings SolutionSettings { get; set; }
+        private Lazy<Configuration.ISettings> _solutionSettings;
+
+        private Configuration.ISettings SolutionSettings => _solutionSettings.Value;
         private ISolutionManager SolutionManager { get; set; }
         private Configuration.IMachineWideSettings MachineWideSettings { get; set; }
 
@@ -34,14 +36,17 @@ namespace NuGet.PackageManagement.VisualStudio
 
             SolutionManager = solutionManager;
             MachineWideSettings = machineWideSettings;
-            ResetSolutionSettings();
+
+            _solutionSettings = new Lazy<Configuration.ISettings>(() => GetSolutionSettings());
+
             SolutionManager.SolutionOpening += OnSolutionOpenedOrClosed;
             SolutionManager.SolutionClosed += OnSolutionOpenedOrClosed;
         }
 
-        private void ResetSolutionSettings()
+        private Configuration.ISettings GetSolutionSettings()
         {
             string root;
+            Configuration.ISettings solutionSettings = null;
             if (SolutionManager == null
                 || !SolutionManager.IsSolutionOpen
                 || string.IsNullOrEmpty(SolutionManager.SolutionDirectory))
@@ -55,22 +60,24 @@ namespace NuGet.PackageManagement.VisualStudio
 
             try
             {
-                SolutionSettings = Configuration.Settings.LoadDefaultSettings(root, configFileName: null, machineWideSettings: MachineWideSettings);
+                solutionSettings = Configuration.Settings.LoadDefaultSettings(root, configFileName: null, machineWideSettings: MachineWideSettings);
             }
             catch (Configuration.NuGetConfigurationException ex)
             {
                 MessageHelper.ShowErrorMessage(ExceptionUtilities.DisplayMessage(ex), Strings.ConfigErrorDialogBoxTitle);
             }
 
-            if (SolutionSettings == null)
+            if (solutionSettings == null)
             {
-                SolutionSettings = Configuration.NullSettings.Instance;
+                solutionSettings = Configuration.NullSettings.Instance;
             }
+
+            return solutionSettings;
         }
 
         private void OnSolutionOpenedOrClosed(object sender, EventArgs e)
         {
-            ResetSolutionSettings();
+            _solutionSettings = new Lazy<Configuration.ISettings>(() => GetSolutionSettings());
 
             // raises event SettingsChanged
             if (SettingsChanged != null)
