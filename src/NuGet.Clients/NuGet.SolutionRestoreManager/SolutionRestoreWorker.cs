@@ -118,6 +118,7 @@ namespace NuGet.SolutionRestoreManager
 
                     var dte = _serviceProvider.GetDTE();
                     _solutionEvents = dte.Events.SolutionEvents;
+                    _solutionEvents.BeforeClosing += SolutionEvents_BeforeClosing;
                     _solutionEvents.AfterClosing += SolutionEvents_AfterClosing;
 #if VS15
                     // these properties are specific to VS15 since they are use to attach to solution events
@@ -149,13 +150,21 @@ namespace NuGet.SolutionRestoreManager
 
         private void Reset(bool isDisposing = false)
         {
-            _workerCts?.Cancel();
+            if (_workerCts?.IsCancellationRequested == false)
+            {
+                _workerCts.Cancel();
+            }
 
             if (_backgroundJobRunner?.IsValueCreated == true)
             {
                 // Do not block VS for more than 5 sec.
-                _joinableFactory.Run(
-                    () => Task.WhenAny(_backgroundJobRunner.Value, Task.Delay(TimeSpan.FromSeconds(5))));
+                _joinableFactory.Run(async () =>
+                {
+                    using (_joinableCollection.Join())
+                    {
+                        await Task.WhenAny(_backgroundJobRunner.Value, Task.Delay(TimeSpan.FromSeconds(60)));
+                    }
+                });
             }
 
             _pendingRestore?.Dispose();
@@ -184,6 +193,11 @@ namespace NuGet.SolutionRestoreManager
             }
         }
 
+        private void SolutionEvents_BeforeClosing()
+        {
+            _workerCts?.Cancel();
+        }
+
         private void SolutionEvents_AfterClosing()
         {
             Reset();
@@ -193,6 +207,11 @@ namespace NuGet.SolutionRestoreManager
         public async Task<bool> ScheduleRestoreAsync(
             SolutionRestoreRequest request, CancellationToken token)
         {
+            if (token.IsCancellationRequested)
+            {
+                return false;
+            }
+
             // Initialize if not already done.
             await InitializeAsync();
 
@@ -208,9 +227,11 @@ namespace NuGet.SolutionRestoreManager
             // on-board request onto pending restore operation
             _pendingRequests.Value.TryAdd(request);
 
+            var tcs = new TaskCompletionSource<bool>();
+            using (token.Register(s => ((TaskCompletionSource<bool>)s).SetResult(false), tcs))
             using (_joinableCollection.Join())
             {
-                return await (Task<bool>)pendingRestore;
+                return await await Task.WhenAny(pendingRestore.Task, tcs.Task);
             }
         }
 
@@ -325,7 +346,7 @@ namespace NuGet.SolutionRestoreManager
 
         private async Task PromoteTaskToActiveAsync(BackgroundRestoreOperation restoreOperation, CancellationToken token)
         {
-            var pendingTask = (Task<bool>)restoreOperation;
+            var pendingTask = restoreOperation.Task;
 
             int attempt = 0;
             for (var retry = true;
@@ -395,11 +416,9 @@ namespace NuGet.SolutionRestoreManager
 
             private TaskCompletionSource<bool> JobTcs { get; } = new TaskCompletionSource<bool>();
 
-            private Task<bool> Task => JobTcs.Task;
+            public Task<bool> Task => JobTcs.Task;
 
             public System.Runtime.CompilerServices.TaskAwaiter<bool> GetAwaiter() => Task.GetAwaiter();
-
-            public static explicit operator Task<bool>(BackgroundRestoreOperation restoreOperation) => restoreOperation.Task;
 
             public void ContinuationAction(Task<bool> targetTask)
             {
