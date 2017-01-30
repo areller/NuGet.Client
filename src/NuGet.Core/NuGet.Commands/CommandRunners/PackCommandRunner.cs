@@ -165,8 +165,24 @@ namespace NuGet.Commands
             ExcludeFiles(builder.Files);
         }
 
+        private bool NoNuSpecFile()
+        {
+            var files = Directory.GetFiles(_packArgs.BasePath);
+            return !files.Any(f => f.EndsWith(NuGetConstants.ManifestExtension));
+        }
+
+        private void DemandNuSpecFile()
+        {
+            if (_packArgs.RequireNuSpec && NoNuSpecFile())
+            {
+                throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, Strings.Error_NuSpecFileIsMissing));
+            }
+        }
+
         private PackageArchiveReader BuildFromProjectJson(string path)
         {
+            DemandNuSpecFile();
+
             PackageBuilder packageBuilder = CreatePackageBuilderFromProjectJson(path, _packArgs.GetPropertyValue);
 
             if (_packArgs.Build)
@@ -713,6 +729,8 @@ namespace NuGet.Commands
 
         private PackageArchiveReader BuildFromProjectFile(string path)
         {
+            DemandNuSpecFile();
+
             if ((String.IsNullOrEmpty(_packArgs.MsBuildDirectory?.Value) || _createProjectFactory == null) && _packArgs.PackTargetArgs == null)
             {
                 _packArgs.Logger.LogError(Strings.Error_CannotFindMsbuild);

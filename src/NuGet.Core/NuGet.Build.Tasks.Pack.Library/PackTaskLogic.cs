@@ -25,6 +25,7 @@ namespace NuGet.Build.Tasks.Pack
             {
                 Logger = request.Logger,
                 OutputDirectory = request.PackageOutputPath,
+                RequireNuSpec = request.RequireNuSpec ?? false,
                 Serviceable = request.Serviceable,
                 Tool = request.IsTool,
                 Symbols = request.IncludeSymbols,

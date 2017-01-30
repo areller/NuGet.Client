@@ -150,6 +150,14 @@ namespace NuGet.Commands {
         }
 
         /// <summary>
+        /// Looks up a localized string similar to NuSpec file is missing.
+        /// </summary>
+        public static string Error_NuSpecFileIsMissing { 
+            get {
+                return ResourceManager.GetString("Error_NuSpecFileMissing", resourceCulture);
+            }
+
+        /// <summary>
         ///    Looks up a localized string similar to Failed to build package. Ensure &apos;{0}&apos; includes source and symbol files. For help on building symbols package, visit {1}..
         /// </summary>
         public static string Error_PackageCommandNoFilesForSymbolsPackage {

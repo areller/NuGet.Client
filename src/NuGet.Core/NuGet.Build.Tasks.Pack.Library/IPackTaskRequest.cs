@@ -33,6 +33,7 @@ namespace NuGet.Build.Tasks.Pack
         string MinClientVersion { get; }
         bool NoPackageAnalysis { get; }
         string NuspecBasePath { get; }
+        bool RequireNuSpec { get; }
         string NuspecFile { get; }
         string[] NuspecProperties { get; }
         string NuspecOutputPath { get; }
